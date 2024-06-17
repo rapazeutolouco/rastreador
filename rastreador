@@ -1,0 +1,89 @@
+
+#!/bin/bash
+
+# Função para detectar o gerenciador de pacotes e instalar dependências
+check_dependencies() {
+    local DEPENDENCIES=("dialog" "jq")
+    local PKG_MANAGER=""
+
+    if command -v apt-get >/dev/null 2>&1; then
+        PKG_MANAGER="apt-get"
+    elif command -v yum >/dev/null 2>&1; then
+        PKG_MANAGER="yum"
+    elif command -v dnf >/dev/null 2>&1; then
+        PKG_MANAGER="dnf"
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG_MANAGER="pacman"
+    elif command -v zypper >/dev/null 2>&1; then
+        PKG_MANAGER="zypper"
+    else
+        echo "Gerenciador de pacotes não suportado. Instale as dependências manualmente."
+        exit 1
+    fi
+
+    for dep in "${DEPENDENCIES[@]}"; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            echo "Dependência '$dep' não encontrada. Instalando..."
+            case "$PKG_MANAGER" in
+                apt-get)
+                    sudo apt-get update
+                    sudo apt-get install -y "$dep"
+                    ;;
+                yum)
+                    sudo yum install -y "$dep"
+                    ;;
+                dnf)
+                    sudo dnf install -y "$dep"
+                    ;;
+                pacman)
+                    sudo pacman -Sy --noconfirm "$dep"
+                    ;;
+                zypper)
+                    sudo zypper install -y "$dep"
+                    ;;
+                *)
+                    echo "Gerenciador de pacotes não suportado. Instale '$dep' manualmente."
+                    exit 1
+                    ;;
+            esac
+        fi
+    done
+}
+
+# Função para obter a localização do IP
+get_ip_location() {
+    local IP="$1"
+    local JSON=$(curl -s "https://ipinfo.io/${IP}/json")
+    local LOC=$(echo "$JSON" | jq -r '.loc // empty')
+    if [ -n "$LOC" ]; then
+        echo "$LOC"
+    else
+        echo "null"
+    fi
+}
+
+# Função para abrir o mapa com a localização
+open_map() {
+    local LOCATION="$1"
+    xdg-open "https://www.google.com/maps/search/?api=1&query=${LOCATION}"
+}
+
+# Função principal do script
+main() {
+    check_dependencies
+
+    IP=$(dialog --stdout --inputbox "Digite o endereço IP:" 0 0)
+    if [ -n "$IP" ]; then
+        LOCATION=$(get_ip_location "$IP")
+        if [ "$LOCATION" != "null" ]; then
+            open_map "$LOCATION"
+        else
+            dialog --msgbox "Localização não encontrada para o IP: $IP" 0 0
+        fi
+    else
+        dialog --msgbox "Nenhum IP inserido." 0 0
+    fi
+}
+
+# Executa o script principal
+main
